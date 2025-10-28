@@ -108,8 +108,7 @@ func (u *Users) broadcast(message interface{}) {
 func WSHandler(ws *websocket.Conn) {
 	var message string
 	for {
-		err := websocket.Message.Receive(ws, &message)
-		if err != nil {
+		if err := websocket.Message.Receive(ws, &message); err != nil {
 			fmt.Println("Error Occured: ", err)
 			globalUsers.removeUser(ws)
 			return
@@ -131,6 +130,7 @@ func WSHandler(ws *websocket.Conn) {
 				return
 			}
 			globalUsers.addUser(ws, newUserMessage.Username)
+			globalUsers.broadcast(newUserMessage)
 			continue
 		case BroadcastMessageType:
 			var broadcastMsg BroadcastMessage
