@@ -30,6 +30,7 @@ type MessageType string
 const (
 	NewUserType          MessageType = "newUser"
 	BroadcastMessageType MessageType = "broadcastMessage"
+	UserListType         MessageType = "userList"
 )
 
 type BaseMessage struct {
@@ -45,6 +46,16 @@ type BroadcastMessage struct {
 type NewUserMessage struct {
 	BaseMessage
 	Username string `json:"username"`
+}
+
+type UserInfo struct {
+	UserID   int    `json:"userId"`
+	Username string `json:"username"`
+}
+
+type UserListMessage struct {
+	BaseMessage
+	Users []UserInfo `json:"users"`
 }
 
 var globalUsers = Users{connections: make([]User, 0)}
@@ -75,6 +86,28 @@ func (u *Users) removeUser(ws *websocket.Conn) {
 	}
 }
 
+func (u *Users) sendUserList(ws *websocket.Conn) {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+
+	userInfos := make([]UserInfo, len(u.connections))
+	for i, user := range u.connections {
+		userInfos[i] = UserInfo{
+			UserID:   user.UserID,
+			Username: user.Username,
+		}
+	}
+
+	userListMsg := UserListMessage{
+		BaseMessage: BaseMessage{MessageType: UserListType},
+		Users:       userInfos,
+	}
+
+	if err := websocket.JSON.Send(ws, userListMsg); err != nil {
+		fmt.Println("Error sending user list:", err)
+	}
+}
+
 func (u *Users) broadcast(message interface{}) {
 	u.mu.Lock()
 
@@ -92,7 +125,7 @@ func (u *Users) broadcast(message interface{}) {
 	// Collect failed connections while lock is held
 	var failedConns []*websocket.Conn
 	for _, user := range u.connections {
-		if err := websocket.Message.Send(user.conn, message); err != nil {
+		if err := websocket.JSON.Send(user.conn, message); err != nil {
 			failedConns = append(failedConns, user.conn)
 			fmt.Println("Error sending message")
 		}
@@ -130,6 +163,9 @@ func WSHandler(ws *websocket.Conn) {
 				return
 			}
 			globalUsers.addUser(ws, newUserMessage.Username)
+			// Send current user list to the new user
+			globalUsers.sendUserList(ws)
+			// Broadcast to everyone that a new user joined
 			globalUsers.broadcast(newUserMessage)
 			continue
 		case BroadcastMessageType:
