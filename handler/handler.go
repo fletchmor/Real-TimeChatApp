@@ -108,7 +108,7 @@ func (u *Users) sendUserList(ws *websocket.Conn) {
 	}
 }
 
-func (u *Users) broadcast(message interface{}) {
+func (u *Users) broadcast(message any) {
 	u.mu.Lock()
 
 	switch message.(type) {
@@ -139,11 +139,20 @@ func (u *Users) broadcast(message interface{}) {
 }
 
 func WSHandler(ws *websocket.Conn) {
+	fmt.Println("New WebSocket connection established")
+	defer func() {
+		globalUsers.removeUser(ws)
+		ws.Close()
+		fmt.Println("WebSocket connection closed")
+	}()
+
 	var message string
 	for {
 		if err := websocket.Message.Receive(ws, &message); err != nil {
-			fmt.Println("Error Occured: ", err)
-			globalUsers.removeUser(ws)
+			// Don't log EOF as an error - it's a normal connection closure
+			if err.Error() != "EOF" {
+				fmt.Println("WebSocket error: ", err)
+			}
 			return
 		}
 
